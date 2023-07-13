@@ -2,15 +2,18 @@ package connSelenium
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/tebeka/selenium"
 )
 
 type Selenium interface {
 	OpenURL(url string) error
+	GetURL() (string, error)
 	SendKeysToElement(by, value, keys string) error
 	GetCaptchaKey() (string, error)
 	CaptchaSolved(key string) error
+	ExecuteScript(script string) error
 	GetTitle() (string, error)
 	GetElementValue(by, value string) (string, error)
 	GetElementText(by, value string) (string, error)
@@ -32,17 +35,37 @@ func GetController() (*Controller, selenium.WebDriver, error) {
 }
 
 func (c *Controller) OpenURL(url string) error {
-	if err := c.wd.Get(url); err != nil {
-		return fmt.Errorf("get url err: %s", err)
-	}
+	return c.wd.Get(url)
+}
 
-	return nil
+func (c *Controller) GetURL() (string, error) {
+	return c.wd.CurrentURL()
 }
 
 func (c *Controller) SendKeysToElement(by, value, keys string) error {
 	element, err := c.wd.FindElement(by, value)
 	if err != nil {
 		return fmt.Errorf("find element \"%s\" by \"%s\" err: %s", by, value, err)
+	}
+
+	displayed, err := element.IsDisplayed()
+	if err != nil {
+		return fmt.Errorf("is displayed check err: %s", err)
+	}
+
+	if !displayed {
+		for i := 0; i < 5; i++ {
+			displayed, err = element.IsDisplayed()
+			if err != nil {
+				return fmt.Errorf("is displayed check err: %s", err)
+			}
+
+			if displayed {
+				break
+			}
+
+			time.Sleep(time.Second)
+		}
 	}
 
 	if err = element.SendKeys(keys); err != nil {
@@ -55,19 +78,23 @@ func (c *Controller) SendKeysToElement(by, value, keys string) error {
 func (c *Controller) GetCaptchaKey() (string, error) {
 	element, err := c.wd.FindElement(selenium.ByCSSSelector, "div[class=g-recaptcha]")
 	if err != nil {
-		return "", fmt.Errorf("find element err: %c", err)
+		return "", fmt.Errorf("find element err: %s", err)
 	}
 
-	attribute, err := element.GetAttribute("data-sitekey")
-	if err != nil {
-		return "", fmt.Errorf("get attribute err: %s", err)
-	}
-
-	return attribute, nil
+	return element.GetAttribute("data-sitekey")
 }
 
 func (c *Controller) CaptchaSolved(key string) error {
 	_, err := c.wd.ExecuteScript(fmt.Sprintf(`document.getElementById("g-recaptcha-response").innerHTML="%s";`, key), nil)
+	if err != nil {
+		return fmt.Errorf("get attribute err: %s", err)
+	}
+
+	return nil
+}
+
+func (c *Controller) ExecuteScript(script string) error {
+	_, err := c.wd.ExecuteScript(script, nil)
 	if err != nil {
 		return fmt.Errorf("get attribute err: %s", err)
 	}
@@ -85,12 +112,7 @@ func (c *Controller) GetElementValue(by, value string) (string, error) {
 		return "", fmt.Errorf("find element err: %s", err)
 	}
 
-	t, err := element.GetAttribute("value")
-	if err != nil {
-		return "", err
-	}
-
-	return t, nil
+	return element.GetAttribute("value")
 }
 
 func (c *Controller) GetElementText(by, value string) (string, error) {
@@ -99,10 +121,5 @@ func (c *Controller) GetElementText(by, value string) (string, error) {
 		return "", err
 	}
 
-	t, err := element.Text()
-	if err != nil {
-		return "", err
-	}
-
-	return t, nil
+	return element.Text()
 }

@@ -8,72 +8,73 @@ import (
 )
 
 func (c *Controller) Registration() error {
-	err := c.s.OpenURL("https://bscscan.com/register")
-	if err != nil {
+	if err := c.s.OpenURL("https://bscscan.com/register"); err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
 
-	username := c.e.GetUsername()
-	password := c.e.GetPassword()
-	email := c.e.GetEmail()
+	username, password, email := c.e.GetUsername(), c.e.GetPassword(), c.e.GetEmail()
 
 	steps := []Step{
 		{
 			by:    selenium.ByID,
 			value: "ContentPlaceHolder1_txtUserName",
-			text:  username,
-			check: Check{
-				errorValue: "ContentPlaceHolder1_txtUserName-error",
-				errorText:  "Username is invalid.",
+			keys:  username,
+			error: Check{
+				by:    selenium.ByID,
+				value: "ContentPlaceHolder1_txtUserName-error",
+				error: "Username is invalid.",
 			},
 		},
 		{
 			by:    selenium.ByID,
 			value: "ContentPlaceHolder1_txtEmail",
-			text:  email,
-			check: Check{
-				errorValue: "ContentPlaceHolder1_txtEmail-error",
-				errorText:  "Please enter a valid email address.",
+			keys:  email,
+			error: Check{
+				by:    selenium.ByID,
+				value: "ContentPlaceHolder1_txtEmail-error",
+				error: "Please enter a valid email address.",
 			},
 		},
 		{
 			by:    selenium.ByID,
 			value: "ContentPlaceHolder1_txtPassword",
-			text:  password,
-			check: Check{
-				errorValue: "ContentPlaceHolder1_txtPassword-error",
-				errorText:  "Your password must be at least 5 characters long.",
+			keys:  password,
+			error: Check{
+				by:    selenium.ByID,
+				value: "ContentPlaceHolder1_txtPassword-error",
+				error: "Your password must be at least 5 characters long.",
 			},
 		},
 		{
 			by:    selenium.ByID,
 			value: "ContentPlaceHolder1_txtPassword2",
-			text:  password,
-			check: Check{
-				errorValue: "",
-				errorText:  "",
+			keys:  password,
+			error: Check{
+				by:    "",
+				value: "",
+				error: "",
 			},
 		},
 		{
 			by:    selenium.ByID,
 			value: "ContentPlaceHolder1_MyCheckBox",
-			text:  selenium.SpaceKey,
-			check: Check{
-				errorValue: "ctl00$ContentPlaceHolder1$MyCheckBox-error",
-				errorText:  "Please accept our Terms and Conditions.",
+			keys:  selenium.SpaceKey,
+			error: Check{
+				by:    selenium.ByID,
+				value: "ctl00$ContentPlaceHolder1$MyCheckBox-error",
+				error: "Please accept our Terms and Conditions.",
 			},
 		},
 	}
 
 	for _, step := range steps {
-		err = c.s.SendKeysToElement(step.by, step.value, step.text)
-		if err != nil {
+		if err := c.s.SendKeysToElement(step.by, step.value, step.keys); err != nil {
 			return fmt.Errorf("send keys to element err: %s", err)
 		}
 
-		if step.check.errorText != "" {
-			text, _ := c.s.GetElementText(selenium.ByID, step.check.errorText)
-			if strings.Contains(text, step.check.errorValue) {
+		if step.error.by != "" && step.error.value != "" && step.error.error != "" {
+			text, _ := c.s.GetElementText(selenium.ByID, step.error.error)
+			if strings.Contains(text, step.error.value) {
 				return fmt.Errorf(text)
 			}
 		}
@@ -89,13 +90,11 @@ func (c *Controller) Registration() error {
 		return fmt.Errorf("get captcha solved key err: %s", err)
 	}
 
-	err = c.s.CaptchaSolved(solvedKey)
-	if err != nil {
+	if err = c.s.CaptchaSolved(solvedKey); err != nil {
 		return fmt.Errorf("captcha solved err: %s", err)
 	}
 
-	err = c.s.SendKeysToElement(selenium.ByID, "ContentPlaceHolder1_btnRegister", selenium.SpaceKey)
-	if err != nil {
+	if err = c.s.SendKeysToElement(selenium.ByID, "ContentPlaceHolder1_btnRegister", selenium.SpaceKey); err != nil {
 		return fmt.Errorf("send keys to element err: %s", err)
 	}
 
@@ -109,8 +108,7 @@ func (c *Controller) Registration() error {
 		return fmt.Errorf("get url err: %s", err)
 	}
 
-	err = c.s.OpenURL(url)
-	if err != nil {
+	if err = c.s.OpenURL(url); err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
 

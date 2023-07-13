@@ -2,6 +2,7 @@ package captcha
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"bscscan_login/config"
@@ -17,20 +18,22 @@ type Controller struct {
 }
 
 func GetController(c *config.Config) *Controller {
-	a := &anticaptcha.Client{APIKey: c.CaptchaToken}
-
-	return &Controller{a: a}
+	return &Controller{a: &anticaptcha.Client{APIKey: c.CaptchaToken}}
 }
 
-func (c *Controller) GetCaptchaSolvedKey(key string) (string, error) {
-	key, err := c.a.SendRecaptcha(
+func (c *Controller) GetCaptchaSolvedKey(captchaKey string) (string, error) {
+	log.Println("getting the solved key...")
+
+	solvedKey, err := c.a.SendRecaptcha(
 		"https://bscscan.com/register", // url that has the recaptcha
-		key,                            // the recaptcha key
+		captchaKey,                     // the recaptcha key
 		time.Second*60*30,
 	)
 	if err != nil {
 		return "", fmt.Errorf("send recapthca err: %s", err)
 	}
 
-	return key, nil
+	log.Println("solved key received")
+
+	return solvedKey, nil
 }

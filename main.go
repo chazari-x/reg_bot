@@ -57,7 +57,12 @@ func StartBot() error {
 		return fmt.Errorf("get number of all users before err: %s", err)
 	}
 
-	for i := 0; i < 15-allUsers; i++ {
+	invalidUsers, err := d.GetNumberOfInvalidUsers()
+	if err != nil {
+		return fmt.Errorf("get number of invalid users before err: %s", err)
+	}
+
+	for i := 0; i < 1000-allUsers+invalidUsers; i++ {
 		if err = b.Registration(); err != nil {
 			log.Printf("registration err: %s", err)
 			i--
@@ -76,9 +81,26 @@ func StartBot() error {
 		return fmt.Errorf("get number of null users err: %s", err)
 	}
 
+	for i := 0; i < nullUsers; i++ {
+		if err = b.Authorization(); err != nil {
+			log.Printf("authorization err: %s", err)
+			i--
+		}
+	}
+
+	nullUsers, err = d.GetNumberOfNullUsers()
+	if err != nil {
+		return fmt.Errorf("get number of null users err: %s", err)
+	}
+
+	invalidUsers, err = d.GetNumberOfInvalidUsers()
+	if err != nil {
+		return fmt.Errorf("get number of invalid users before err: %s", err)
+	}
+
 	log.Printf("Пользователей без токена: %d\n", nullUsers)
 
-	// TODO: login and get api token
+	log.Printf("Невалидных пользователей: %d\n", invalidUsers)
 
 	return nil
 }

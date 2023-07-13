@@ -2,6 +2,7 @@ package connDB
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -14,9 +15,12 @@ import (
 type DB interface {
 	GetNumberOfAllUsers() (int, error)
 	GetNumberOfNullUsers() (int, error)
+	GetNumberOfInvalidUsers() (int, error)
 	AddUser(username, password string) error
-	GetUser() (string, string, error)
+	GetNullUser() (string, string, error)
 	GetAllUsers() ([]Users, error)
+	UpdateToken(username, token string) error
+	UpdateInvalidUser(username string) error
 }
 
 type Controller struct {
@@ -38,14 +42,17 @@ var (
 						password 	VARCHAR 			NOT NULL, 
 						token 		VARCHAR 			NULL)`
 
-	selectNumberOfAllUsers  = `SELECT COUNT(*) FROM users`
-	selectNumberOfNullUsers = `SELECT COUNT(*) FROM users WHERE token IS NULL`
+	selectNumberOfAllUsers     = `SELECT COUNT(*) FROM users`
+	selectNumberOfNullUsers    = `SELECT COUNT(*) FROM users WHERE token IS NULL`
+	selectNumverOfInvalidUsers = `SELECT COUNT(*) FROM users WHERE token = 'INVALID'`
 
 	selectAllUsers = `SELECT username, password, COALESCE(token, '-') FROM users`
 	selectNullUser = `SELECT username, password FROM users WHERE token IS NULL LIMIT(1)`
 
-	insertUser  = `INSERT INTO users (username, password) VALUES ($1, $2)`
-	updateToken = `UPDATE users SET token = $2 WHERE username = $1`
+	insertUser = `INSERT INTO users (username, password) VALUES ($1, $2)`
+
+	updateToken       = `UPDATE users SET token = $2 WHERE username = $1`
+	updateInvalidUser = `UPDATE users SET token = 'INVALID' WHERE username = $1`
 )
 
 func GetController(conf config.Config) (*Controller, *sql.DB, error) {
@@ -64,15 +71,13 @@ func GetController(conf config.Config) (*Controller, *sql.DB, error) {
 		return nil, nil, fmt.Errorf("ping db err: %s", err)
 	}
 
-	_, err = db.Exec(createTable)
-	if err != nil {
+	if _, err = db.Exec(createTable); err != nil {
 		return nil, nil, fmt.Errorf("create table err: %s", err)
 	}
 
 	c := &Controller{db: db}
 
 	users, err := c.GetAllUsers()
-
 	for _, k := range users {
 		log.Printf("user in db: %s %s %s", k.Username, k.Password, k.Token)
 	}
@@ -85,9 +90,7 @@ func (c *Controller) GetNumberOfAllUsers() (int, error) {
 	defer cancel()
 
 	var users int
-
-	err := c.db.QueryRowContext(ctx, selectNumberOfAllUsers).Scan(&users)
-	if err != nil {
+	if err := c.db.QueryRowContext(ctx, selectNumberOfAllUsers).Scan(&users); err != nil {
 		return 0, err
 	}
 
@@ -99,9 +102,19 @@ func (c *Controller) GetNumberOfNullUsers() (int, error) {
 	defer cancel()
 
 	var users int
+	if err := c.db.QueryRowContext(ctx, selectNumberOfNullUsers).Scan(&users); err != nil {
+		return 0, err
+	}
 
-	err := c.db.QueryRowContext(ctx, selectNumberOfNullUsers).Scan(&users)
-	if err != nil {
+	return users, nil
+}
+
+func (c *Controller) GetNumberOfInvalidUsers() (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var users int
+	if err := c.db.QueryRowContext(ctx, selectNumverOfInvalidUsers).Scan(&users); err != nil {
 		return 0, err
 	}
 
@@ -112,15 +125,13 @@ func (c *Controller) AddUser(username, password string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	_, err := c.db.ExecContext(ctx, insertUser, username, password)
-	if err != nil {
+	if _, err := c.db.ExecContext(ctx, insertUser, username, password); err != nil {
 		if err != nil {
 			return err
 		}
 	}
 
 	log.Printf("user add: %s %s", username, password)
-
 	return nil
 }
 
@@ -129,7 +140,6 @@ func (c *Controller) GetAllUsers() ([]Users, error) {
 	defer cancel()
 
 	var users []Users
-
 	rows, err := c.db.QueryContext(ctx, selectAllUsers)
 	if err != nil {
 		return nil, err
@@ -137,8 +147,7 @@ func (c *Controller) GetAllUsers() ([]Users, error) {
 
 	for rows.Next() {
 		var user Users
-		err = rows.Scan(&user.Username, &user.Password, &user.Token)
-		if err != nil {
+		if err = rows.Scan(&user.Username, &user.Password, &user.Token); err != nil {
 			return nil, err
 		}
 
@@ -148,15 +157,15 @@ func (c *Controller) GetAllUsers() ([]Users, error) {
 	return users, nil
 }
 
-func (c *Controller) GetUser() (string, string, error) {
+func (c *Controller) GetNullUser() (string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	var user Users
-
-	err := c.db.QueryRowContext(ctx, selectNullUser).Scan(&user.Username, &user.Password)
-	if err != nil {
-		return "", "", err
+	if err := c.db.QueryRowContext(ctx, selectNullUser).Scan(&user.Username, &user.Password); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", "", err
+		}
 	}
 
 	return user.Username, user.Password, nil
@@ -166,12 +175,28 @@ func (c *Controller) UpdateToken(username, token string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	_, err := c.db.ExecContext(ctx, updateToken, username, token)
-	if err != nil {
+	if _, err := c.db.ExecContext(ctx, updateToken, username, token); err != nil {
 		if err != nil {
 			return err
 		}
 	}
+
+	log.Printf("update token: %s %s", username, token)
+
+	return nil
+}
+
+func (c *Controller) UpdateInvalidUser(username string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if _, err := c.db.ExecContext(ctx, updateInvalidUser, username); err != nil {
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Printf("update invalid user: %s", username)
 
 	return nil
 }

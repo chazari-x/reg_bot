@@ -22,14 +22,39 @@ import (
 
 type Email interface {
 	GetUsername() string
-	GetEmail() string
 	GetPassword() string
+	GetEmail() string
 	GetUrl() (string, error)
 }
 
 type Controller struct {
 	c   *config.Config
 	srv *gmail.Service
+}
+
+func GetController(c *config.Config) (*Controller, error) {
+	b, err := os.ReadFile("loginEmail/credentials.json")
+	if err != nil {
+		return nil, fmt.Errorf("unable to read client secret file: %s", err)
+	}
+
+	// If modifying these scopes, delete your previously saved token.json.
+	configFromJson, err := google.ConfigFromJSON(b, gmail.GmailReadonlyScope)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse client secret file to config: %s", err)
+	}
+
+	client, err := getClient(configFromJson)
+	if err != nil {
+		return nil, fmt.Errorf("get client err: %s", err)
+	}
+
+	srv, err := gmail.NewService(context.Background(), option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve Gmail client: %s", err)
+	}
+
+	return &Controller{c: c, srv: srv}, nil
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
@@ -42,12 +67,11 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 	if err != nil {
 		tok, err = getTokenFromWeb(config)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get token from wev err: %s", err)
 		}
 
-		err := saveToken(tokFile, tok)
-		if err != nil {
-			return nil, err
+		if err = saveToken(tokFile, tok); err != nil {
+			return nil, fmt.Errorf("save token err: %s", err)
 		}
 	}
 	return config.Client(context.Background(), tok), nil
@@ -57,16 +81,16 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
-		"authorization code: \n%v\n", authURL)
+		"authorization code: \n%s\n", authURL)
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {
-		return nil, fmt.Errorf("unable to read authorization code: %v", err)
+		return nil, fmt.Errorf("unable to read authorization code: %s", err)
 	}
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve token from web: %v", err)
+		return nil, fmt.Errorf("unable to retrieve token from web: %s", err)
 	}
 	return tok, nil
 }
@@ -75,11 +99,12 @@ func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open file err: %s", err)
 	}
 	defer func() {
 		_ = f.Close()
 	}()
+
 	tok := &oauth2.Token{}
 	err = json.NewDecoder(f).Decode(tok)
 	return tok, err
@@ -90,42 +115,13 @@ func saveToken(path string, token *oauth2.Token) error {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		return fmt.Errorf("unable to cache oauth token: %v", err)
+		return fmt.Errorf("unable to cache oauth token: %s", err)
 	}
 	defer func() {
 		_ = f.Close()
 	}()
-	err = json.NewEncoder(f).Encode(token)
-	if err != nil {
-		return err
-	}
 
-	return nil
-}
-
-func GetController(c *config.Config) (*Controller, error) {
-	ctx := context.Background()
-	b, err := os.ReadFile("loginEmail/credentials.json")
-	if err != nil {
-		return nil, fmt.Errorf("unable to read client secret file: %v", err)
-	}
-
-	// If modifying these scopes, delete your previously saved token.json.
-	configFromJson, err := google.ConfigFromJSON(b, gmail.GmailReadonlyScope)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse client secret file to config: %v", err)
-	}
-	client, err := getClient(configFromJson)
-	if err != nil {
-		return nil, err
-	}
-
-	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve Gmail client: %v", err)
-	}
-
-	return &Controller{c: c, srv: srv}, nil
+	return json.NewEncoder(f).Encode(token)
 }
 
 func (c *Controller) GetUrl() (string, error) {
@@ -134,7 +130,7 @@ func (c *Controller) GetUrl() (string, error) {
 	call := c.srv.Users.Messages.List("me").Q(query)
 	r, err := call.Do()
 	if err != nil {
-		return "", fmt.Errorf("unable to retrieve messages: %v", err)
+		return "", fmt.Errorf("unable to retrieve messages: %s", err)
 	}
 
 	if len(r.Messages) == 0 {
@@ -142,14 +138,14 @@ func (c *Controller) GetUrl() (string, error) {
 			// Поиск писем с определенным заголовком
 			r, err = call.Do()
 			if err != nil {
-				return "", fmt.Errorf("unable to retrieve messages: %v", err)
+				return "", fmt.Errorf("unable to retrieve messages: %s", err)
 			}
 
 			if len(r.Messages) != 0 {
 				break
 			}
 
-			time.Sleep(time.Second)
+			time.Sleep(time.Second / 2)
 		}
 	}
 
@@ -172,29 +168,24 @@ func (c *Controller) GetUrl() (string, error) {
 
 // Функция для поиска ссылки в тексте
 func findLink(text string) string {
-	linkRegexp := regexp.MustCompile(`https:\/\/BscScan\.com\/confirmemail\?email=[^\s]+`)
-	linkRegexp2 := regexp.MustCompile(`[^\s]+&code=[^\s]+`)
-	match := linkRegexp.FindString(text)
-	match2 := linkRegexp2.FindString(text)
-	m := strings.ReplaceAll(match[:len(match)-1]+match2, "email=3D", "email=")
+	l1 := regexp.MustCompile(`https://BscScan\.com/confirmemail\?email=\S+`)
+	l2 := regexp.MustCompile(`\S+&code=\S+`)
+	m1 := l1.FindString(text)
+	m := strings.ReplaceAll(m1[:len(m1)-1]+l2.FindString(text), "email=3D", "email=")
 	return strings.ReplaceAll(m, "code=3D", "code=")
 }
 
-var i = rand.Intn(1000)
+var i = rand.Intn(500)
 
 func (c *Controller) GetUsername() string {
-	id := strconv.FormatInt(int64(i), 32)
-	return strings.Repeat(id, 5)
-}
-
-func (c *Controller) GetEmail() string {
-	id := strconv.FormatInt(int64(i), 32)
-	i += rand.Intn(1000)
-
-	return fmt.Sprintf("%s+%s%s", c.c.Email.Username, id, c.c.Email.Domain)
+	i += rand.Intn(500)
+	return strings.Repeat(strconv.FormatInt(int64(i), 32), 4)
 }
 
 func (c *Controller) GetPassword() string {
-	id := strconv.FormatInt(int64(i), 32)
-	return strconv.FormatInt(int64(rand.Intn(1000)), 32) + strings.Repeat(id, 5) + strconv.FormatInt(int64(rand.Intn(1000)), 32)
+	return strings.Repeat(strconv.FormatInt(int64(i), 32), 6)
+}
+
+func (c *Controller) GetEmail() string {
+	return fmt.Sprintf("%s+%s%s", c.c.Email.Username, strconv.FormatInt(int64(i), 32), c.c.Email.Domain)
 }

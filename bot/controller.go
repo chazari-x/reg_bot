@@ -19,16 +19,19 @@ type Controller struct {
 	db connDB.DB
 }
 
+// Step of the action execution.
 type Step struct {
-	by    string
-	value string
-	text  string
-	check Check
+	by    string // Find element by.
+	value string // Search value.
+	keys  string // These keys are inserted into the element.
+	error Check  // error check.
 }
 
+// Check is an element that may contain an error.
 type Check struct {
-	errorValue string
-	errorText  string
+	by    string // Find element by.
+	value string // Search value.
+	error string // Text error.
 }
 
 func GetController(s connSelenium.Selenium, e loginEmail.Email, a captcha.Captcha, db connDB.DB) *Controller {
