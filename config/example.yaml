@@ -1,0 +1,12 @@
+email:
+  username: "username"
+  domain: "@gmail.com"
+
+captchaToken: "aaaaaaaaa"
+
+db:
+  host: "postgres"
+  port: "5432"
+  user: "postgres"
+  pass: "postgrespw"
+  name: "postgres"
