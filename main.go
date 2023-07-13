@@ -49,14 +49,34 @@ func StartBot() error {
 
 	a := captcha.GetController(&c)
 
-	b := bot.GetController(s, e, a, d)
+	var b bot.Bot
+	b = bot.GetController(s, e, a, d)
 
-	// TODO: for 1000 this:
-	//for i := 0; i < 10; i++ {
-	if err = b.Registration(); err != nil {
-		log.Printf("registration err: %s", err)
+	allUsers, err := d.GetNumberOfAllUsers()
+	if err != nil {
+		return fmt.Errorf("get number of all users before err: %s", err)
 	}
-	//}
+
+	for i := 0; i < 15-allUsers; i++ {
+		if err = b.Registration(); err != nil {
+			log.Printf("registration err: %s", err)
+			i--
+		}
+	}
+
+	allUsers, err = d.GetNumberOfAllUsers()
+	if err != nil {
+		return fmt.Errorf("get number of all users after err: %s", err)
+	}
+
+	log.Printf("Зарегистрировано пользователей: %d\n", allUsers)
+
+	nullUsers, err := d.GetNumberOfNullUsers()
+	if err != nil {
+		return fmt.Errorf("get number of null users err: %s", err)
+	}
+
+	log.Printf("Пользователей без токена: %d\n", nullUsers)
 
 	// TODO: login and get api token
 

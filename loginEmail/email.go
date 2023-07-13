@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -166,10 +165,7 @@ func (c *Controller) GetUrl() (string, error) {
 		return "", fmt.Errorf("url not founded")
 	}
 
-	decodedData, err := base64.RawURLEncoding.DecodeString(gmailMessageResponse.Raw)
-	if err != nil {
-		log.Println("error b64 decoding: ", err)
-	}
+	decodedData, _ := base64.RawURLEncoding.DecodeString(gmailMessageResponse.Raw)
 
 	return findLink(fmt.Sprintf("%s", decodedData)), nil
 }

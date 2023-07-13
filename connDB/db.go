@@ -12,6 +12,8 @@ import (
 )
 
 type DB interface {
+	GetNumberOfAllUsers() (int, error)
+	GetNumberOfNullUsers() (int, error)
 	AddUser(username, password string) error
 	GetUser() (string, string, error)
 	GetAllUsers() ([]Users, error)
@@ -36,10 +38,14 @@ var (
 						password 	VARCHAR 			NOT NULL, 
 						token 		VARCHAR 			NULL)`
 
+	selectNumberOfAllUsers  = `SELECT COUNT(*) FROM users`
+	selectNumberOfNullUsers = `SELECT COUNT(*) FROM users WHERE token IS NULL`
+
 	selectAllUsers = `SELECT username, password, COALESCE(token, '-') FROM users`
-	selectNullUser = `SELECT username, password FROM users WHERE token = null LIMIT(1)`
-	insertUser     = `INSERT INTO users (username, password) VALUES ($1, $2)`
-	updateToken    = `UPDATE users SET token = $2 WHERE username = $1`
+	selectNullUser = `SELECT username, password FROM users WHERE token IS NULL LIMIT(1)`
+
+	insertUser  = `INSERT INTO users (username, password) VALUES ($1, $2)`
+	updateToken = `UPDATE users SET token = $2 WHERE username = $1`
 )
 
 func GetController(conf config.Config) (*Controller, *sql.DB, error) {
@@ -72,6 +78,34 @@ func GetController(conf config.Config) (*Controller, *sql.DB, error) {
 	}
 
 	return c, db, nil
+}
+
+func (c *Controller) GetNumberOfAllUsers() (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var users int
+
+	err := c.db.QueryRowContext(ctx, selectNumberOfAllUsers).Scan(&users)
+	if err != nil {
+		return 0, err
+	}
+
+	return users, nil
+}
+
+func (c *Controller) GetNumberOfNullUsers() (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var users int
+
+	err := c.db.QueryRowContext(ctx, selectNumberOfNullUsers).Scan(&users)
+	if err != nil {
+		return 0, err
+	}
+
+	return users, nil
 }
 
 func (c *Controller) AddUser(username, password string) error {
