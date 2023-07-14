@@ -2,7 +2,6 @@ package captcha
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"bscscan_login/config"
@@ -22,7 +21,7 @@ func GetController(c *config.Config) *Controller {
 }
 
 func (c *Controller) GetCaptchaSolvedKey(captchaKey string) (string, error) {
-	log.Println("getting the solved key...")
+	//log.Printf("getting the solved key... ")
 
 	solvedKey, err := c.a.SendRecaptcha(
 		"https://bscscan.com/register", // url that has the recaptcha
@@ -33,7 +32,7 @@ func (c *Controller) GetCaptchaSolvedKey(captchaKey string) (string, error) {
 		return "", fmt.Errorf("send recapthca err: %s", err)
 	}
 
-	log.Println("solved key received")
+	//log.Printf("solved key received\n")
 
 	return solvedKey, nil
 }

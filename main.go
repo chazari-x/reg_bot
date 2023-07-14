@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"bscscan_login/bot"
 	"bscscan_login/captcha"
@@ -62,10 +63,14 @@ func StartBot() error {
 		return fmt.Errorf("get number of invalid users before err: %s", err)
 	}
 
-	for i := 0; i < 1000-allUsers+invalidUsers; i++ {
+	var numsErr int
+	for i := 0; i < 1001-allUsers+invalidUsers && numsErr < 15; i++ {
 		if err = b.Registration(); err != nil {
 			log.Printf("registration err: %s", err)
+			numsErr++
 			i--
+		} else {
+			numsErr = 0
 		}
 	}
 
@@ -81,10 +86,14 @@ func StartBot() error {
 		return fmt.Errorf("get number of null users err: %s", err)
 	}
 
-	for i := 0; i < nullUsers; i++ {
+	numsErr = 0
+	for i := 0; i < nullUsers && numsErr < 15; i++ {
 		if err = b.Authorization(); err != nil {
 			log.Printf("authorization err: %s", err)
+			numsErr++
 			i--
+		} else {
+			numsErr = 0
 		}
 	}
 
@@ -101,6 +110,15 @@ func StartBot() error {
 	log.Printf("Пользователей без токена: %d\n", nullUsers)
 
 	log.Printf("Невалидных пользователей: %d\n", invalidUsers)
+
+	allUsers, err = d.GetNumberOfAllUsers()
+	if err != nil {
+		return fmt.Errorf("get number of all users before err: %s", err)
+	}
+
+	log.Printf("валидных пользователей с токеном: %d", allUsers-invalidUsers-nullUsers)
+
+	time.Sleep(time.Second * 15)
 
 	return nil
 }

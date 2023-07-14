@@ -54,18 +54,7 @@ func (c *Controller) SendKeysToElement(by, value, keys string) error {
 	}
 
 	if !displayed {
-		for i := 0; i < 5; i++ {
-			displayed, err = element.IsDisplayed()
-			if err != nil {
-				return fmt.Errorf("is displayed check err: %s", err)
-			}
-
-			if displayed {
-				break
-			}
-
-			time.Sleep(time.Second)
-		}
+		time.Sleep(time.Second)
 	}
 
 	if err = element.SendKeys(keys); err != nil {

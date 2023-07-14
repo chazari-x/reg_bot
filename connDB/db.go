@@ -16,10 +16,10 @@ type DB interface {
 	GetNumberOfAllUsers() (int, error)
 	GetNumberOfNullUsers() (int, error)
 	GetNumberOfInvalidUsers() (int, error)
-	AddUser(username, password string) error
+	AddUser(username, password string, t float64) error
 	GetNullUser() (string, string, error)
 	GetAllUsers() ([]Users, error)
-	UpdateToken(username, token string) error
+	UpdateToken(username, token string, t float64) error
 	UpdateInvalidUser(username string) error
 }
 
@@ -49,7 +49,7 @@ var (
 	selectAllUsers = `SELECT username, password, COALESCE(token, '-') FROM users`
 	selectNullUser = `SELECT username, password FROM users WHERE token IS NULL LIMIT(1)`
 
-	insertUser = `INSERT INTO users (username, password) VALUES ($1, $2)`
+	insertUser = `INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id`
 
 	updateToken       = `UPDATE users SET token = $2 WHERE username = $1`
 	updateInvalidUser = `UPDATE users SET token = 'INVALID' WHERE username = $1`
@@ -121,17 +121,18 @@ func (c *Controller) GetNumberOfInvalidUsers() (int, error) {
 	return users, nil
 }
 
-func (c *Controller) AddUser(username, password string) error {
+func (c *Controller) AddUser(username, password string, t float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if _, err := c.db.ExecContext(ctx, insertUser, username, password); err != nil {
+	var i int
+	if err := c.db.QueryRowContext(ctx, insertUser, username, password).Scan(&i); err != nil {
 		if err != nil {
 			return err
 		}
 	}
 
-	log.Printf("user add: %s %s", username, password)
+	log.Printf("%d user add: %s %s. Average time: %f", i, username, password, t)
 	return nil
 }
 
@@ -171,7 +172,7 @@ func (c *Controller) GetNullUser() (string, string, error) {
 	return user.Username, user.Password, nil
 }
 
-func (c *Controller) UpdateToken(username, token string) error {
+func (c *Controller) UpdateToken(username, token string, t float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
@@ -181,7 +182,7 @@ func (c *Controller) UpdateToken(username, token string) error {
 		}
 	}
 
-	log.Printf("update token: %s %s", username, token)
+	log.Printf("update token: %s %s. Average time: %f", username, token, t)
 
 	return nil
 }

@@ -3,11 +3,17 @@ package bot
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tebeka/selenium"
 )
 
+var registrationAverageTime = 20.0
+var regNums = 1.0
+
 func (c *Controller) Registration() error {
+	start := time.Now()
+
 	if err := c.s.OpenURL("https://bscscan.com/register"); err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
@@ -98,7 +104,7 @@ func (c *Controller) Registration() error {
 		return fmt.Errorf("send keys to element err: %s", err)
 	}
 
-	text, _ := c.s.GetElementText(selenium.ByCSSSelector, "div[role=alert]")
+	text, _ := c.s.GetElementText(selenium.ByXPATH, "//*[@id=\"ctl00\"]/div[4]")
 	if !strings.Contains(text, "Your account registration has been") {
 		return fmt.Errorf(text)
 	}
@@ -117,5 +123,8 @@ func (c *Controller) Registration() error {
 		return fmt.Errorf("invalid account confirmation: %s != %s", "Click to Login", text)
 	}
 
-	return c.db.AddUser(username, password)
+	regNums++
+	registrationAverageTime = registrationAverageTime + time.Since(start).Seconds()
+
+	return c.db.AddUser(username, password, registrationAverageTime/regNums)
 }

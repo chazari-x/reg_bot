@@ -4,11 +4,17 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/tebeka/selenium"
 )
 
+var authorizationAverageTime = 5.0
+var authNums = 1.0
+
 func (c *Controller) Authorization() error {
+	start := time.Now()
+
 	if err := c.s.OpenURL("https://bscscan.com/login"); err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
@@ -47,6 +53,13 @@ func (c *Controller) Authorization() error {
 
 	for _, step := range steps {
 		if err := c.s.SendKeysToElement(step.by, step.value, step.keys); err != nil {
+			text, _ := c.s.GetElementText(selenium.ByXPATH, "//*[@id=\"content\"]/div/div/div/div/div/h1")
+			if strings.Contains(text, "Sorry, our servers are currently busy") {
+				time.Sleep(time.Second * 5)
+
+				return fmt.Errorf("t/o: %s", text)
+			}
+
 			return fmt.Errorf("send keys to element err: %s", err)
 		}
 
@@ -116,20 +129,6 @@ func (c *Controller) Authorization() error {
 		}
 	}
 
-	//if err = c.s.SendKeysToElement(selenium.ByID, "ContentPlaceHolder1_addnew", selenium.EnterKey); err != nil {
-	//	return fmt.Errorf("send keys to element err: %s", err)
-	//}
-	//
-	//time.Sleep(time.Second * 5)
-	//
-	//if err = c.s.SendKeysToElement(selenium.ByID, "ContentPlaceHolder1_txtAppName", username); err != nil {
-	//	return fmt.Errorf("send keys to element err: %s", err)
-	//}
-	//
-	//if err = c.s.SendKeysToElement(selenium.ByID, "ContentPlaceHolder1_btnSubmit", selenium.EnterKey); err != nil {
-	//	return fmt.Errorf("send keys to element err: %s", err)
-	//}
-
 	text, _ = c.s.GetElementText(selenium.ByCSSSelector, "div[class=alert]")
 	if !strings.Contains(text, "Successfully Created") && text != "" {
 		return fmt.Errorf(text)
@@ -144,5 +143,8 @@ func (c *Controller) Authorization() error {
 		return fmt.Errorf("get url err: %s", err)
 	}
 
-	return c.db.UpdateToken(username, regexp.MustCompile(`[A-Za-z0-9]{10,}`).FindString(url))
+	authNums++
+	authorizationAverageTime = authorizationAverageTime + time.Since(start).Seconds()
+
+	return c.db.UpdateToken(username, regexp.MustCompile(`[A-Za-z0-9]{10,}`).FindString(url), authorizationAverageTime/authNums)
 }
