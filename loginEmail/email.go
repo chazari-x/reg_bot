@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -126,7 +127,7 @@ func saveToken(path string, token *oauth2.Token) error {
 
 func (c *Controller) GetUrl() (string, error) {
 	// Поиск писем с определенным заголовком
-	query := "subject:\tPlease confirm your email [BscScan.com]"
+	query := "subject:" + c.c.Site.MessageText
 	call := c.srv.Users.Messages.List("me").Q(query)
 	r, err := call.Do()
 	if err != nil {
@@ -163,16 +164,34 @@ func (c *Controller) GetUrl() (string, error) {
 
 	decodedData, _ := base64.RawURLEncoding.DecodeString(gmailMessageResponse.Raw)
 
-	return findLink(fmt.Sprintf("%s", decodedData)), nil
+	return c.findLink(fmt.Sprintf("%s", decodedData)), nil
 }
 
 // Функция для поиска ссылки в тексте
-func findLink(text string) string {
-	l1 := regexp.MustCompile(`https://BscScan\.com/confirmemail\?email=\S+`)
-	l2 := regexp.MustCompile(`\S+&code=\S+`)
-	m1 := l1.FindString(text)
-	m := strings.ReplaceAll(m1[:len(m1)-1]+l2.FindString(text), "email=3D", "email=")
-	return strings.ReplaceAll(m, "code=3D", "code=")
+func (c *Controller) findLink(text string) string {
+	switch c.c.Site.Name {
+	case "bscscan":
+		l1 := regexp.MustCompile(`https://BscScan\.com/confirmemail\?email=\S+`)
+		l2 := regexp.MustCompile(`\S+&code=\S+`)
+		m1 := l1.FindString(text)
+		if len(m1) != 0 {
+			m := strings.ReplaceAll(m1[:len(m1)-1]+l2.FindString(text), "email=3D", "email=")
+			t := strings.ReplaceAll(m, "code=3D", "code=")
+
+			log.Print(t[:len(t)-4])
+			return t[:len(t)-4]
+		}
+	case "etherscan":
+		l1 := regexp.MustCompile(`HEKTOB4EPHOM%2b[A-Za-z0-9]{2,}%40gmail.com&`)
+		l2 := regexp.MustCompile(`code=\S+`)
+		t := c.c.Site.URL + "confirmemail?email=" + l1.FindString(text) + l2.FindString(text)
+		t = strings.ReplaceAll(t, "code=3D", "code=")
+		if len(t) >= 4 {
+			return t[:len(t)-4]
+		}
+	}
+
+	return ""
 }
 
 var i = rand.Intn(500)

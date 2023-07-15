@@ -24,6 +24,12 @@ type Config struct {
 		Pass string `yaml:"pass"` // Пароль
 		Name string `yaml:"name"` // Название
 	} `yaml:"db"`
+
+	Site struct {
+		URL         string `yaml:"url"`
+		Name        string `yaml:"name"`
+		MessageText string `yaml:"messageText"`
+	} `yaml:"site"`
 }
 
 const configFile = "config/dev.yaml"

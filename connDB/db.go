@@ -16,15 +16,16 @@ type DB interface {
 	GetNumberOfAllUsers() (int, error)
 	GetNumberOfNullUsers() (int, error)
 	GetNumberOfInvalidUsers() (int, error)
-	AddUser(username, password string, t float64) error
+	AddUser(username, password string, t, w float64) error
 	GetNullUser() (string, string, error)
 	GetAllUsers() ([]Users, error)
-	UpdateToken(username, token string, t float64) error
+	UpdateToken(username, token string, t, w float64) error
 	UpdateInvalidUser(username string) error
 }
 
 type Controller struct {
 	db *sql.DB
+	t  Table
 }
 
 type Users struct {
@@ -34,28 +35,45 @@ type Users struct {
 	Token    string `json:"token,omitempty"`
 }
 
+type Tables struct {
+	Bscscan   Table
+	Etherscan Table
+}
+
+type Table struct {
+	createTable                string
+	selectNumberOfAllUsers     string
+	selectNumberOfNullUsers    string
+	selectNumberOfInvalidUsers string
+	selectAllUsers             string
+	selectNullUser             string
+	insertUser                 string
+	updateToken                string
+	updateInvalidUser          string
+}
+
 //goland:noinspection ALL
-var (
-	createTable = `CREATE TABLE IF NOT EXISTS users (
+const (
+	cTable = `CREATE TABLE IF NOT EXISTS %s (
 						id 			SERIAL 	PRIMARY KEY NOT NULL, 
 						username 	VARCHAR UNIQUE 		NOT NULL,
 						password 	VARCHAR 			NOT NULL, 
 						token 		VARCHAR 			NULL)`
 
-	selectNumberOfAllUsers     = `SELECT COUNT(*) FROM users`
-	selectNumberOfNullUsers    = `SELECT COUNT(*) FROM users WHERE token IS NULL`
-	selectNumverOfInvalidUsers = `SELECT COUNT(*) FROM users WHERE token = 'INVALID'`
+	sNumberOfAllUsers     = `SELECT COUNT(*) FROM %s`
+	sNumberOfNullUsers    = `SELECT COUNT(*) FROM %s WHERE token IS NULL`
+	sNumverOfInvalidUsers = `SELECT COUNT(*) FROM %s WHERE token = 'INVALID'`
 
-	selectAllUsers = `SELECT username, password, COALESCE(token, '-') FROM users`
-	selectNullUser = `SELECT username, password FROM users WHERE token IS NULL LIMIT(1)`
+	sAllUsers = `SELECT username, password, COALESCE(token, '-') FROM %s`
+	sNullUser = `SELECT username, password FROM %s WHERE token IS NULL LIMIT(1)`
 
-	insertUser = `INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id`
+	iUser = `INSERT INTO %s (username, password) VALUES ($1, $2) RETURNING id`
 
-	updateToken       = `UPDATE users SET token = $2 WHERE username = $1`
-	updateInvalidUser = `UPDATE users SET token = 'INVALID' WHERE username = $1`
+	uToken       = `UPDATE %s SET token = $2 WHERE username = $1`
+	uInvalidUser = `UPDATE %s SET token = 'INVALID' WHERE username = $1`
 )
 
-func GetController(conf config.Config) (*Controller, *sql.DB, error) {
+func GetController(conf *config.Config) (*Controller, *sql.DB, error) {
 	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		conf.DB.Host, conf.DB.Port, conf.DB.User, conf.DB.Pass, conf.DB.Name)
 
@@ -71,11 +89,27 @@ func GetController(conf config.Config) (*Controller, *sql.DB, error) {
 		return nil, nil, fmt.Errorf("ping db err: %s", err)
 	}
 
-	if _, err = db.Exec(createTable); err != nil {
-		return nil, nil, fmt.Errorf("create table err: %s", err)
+	var t = Table{
+		createTable: fmt.Sprintf(cTable, conf.Site.Name),
+
+		selectNumberOfAllUsers:     fmt.Sprintf(sNumberOfAllUsers, conf.Site.Name),
+		selectNumberOfNullUsers:    fmt.Sprintf(sNumberOfNullUsers, conf.Site.Name),
+		selectNumberOfInvalidUsers: fmt.Sprintf(sNumverOfInvalidUsers, conf.Site.Name),
+
+		selectAllUsers: fmt.Sprintf(sAllUsers, conf.Site.Name),
+		selectNullUser: fmt.Sprintf(sNullUser, conf.Site.Name),
+
+		insertUser: fmt.Sprintf(iUser, conf.Site.Name),
+
+		updateToken:       fmt.Sprintf(uToken, conf.Site.Name),
+		updateInvalidUser: fmt.Sprintf(uInvalidUser, conf.Site.Name),
 	}
 
-	c := &Controller{db: db}
+	c := &Controller{db: db, t: t}
+
+	if _, err = db.Exec(c.t.createTable); err != nil {
+		return nil, nil, fmt.Errorf("create table err: %s", err)
+	}
 
 	users, err := c.GetAllUsers()
 	for _, k := range users {
@@ -90,7 +124,7 @@ func (c *Controller) GetNumberOfAllUsers() (int, error) {
 	defer cancel()
 
 	var users int
-	if err := c.db.QueryRowContext(ctx, selectNumberOfAllUsers).Scan(&users); err != nil {
+	if err := c.db.QueryRowContext(ctx, c.t.selectNumberOfAllUsers).Scan(&users); err != nil {
 		return 0, err
 	}
 
@@ -102,7 +136,7 @@ func (c *Controller) GetNumberOfNullUsers() (int, error) {
 	defer cancel()
 
 	var users int
-	if err := c.db.QueryRowContext(ctx, selectNumberOfNullUsers).Scan(&users); err != nil {
+	if err := c.db.QueryRowContext(ctx, c.t.selectNumberOfNullUsers).Scan(&users); err != nil {
 		return 0, err
 	}
 
@@ -114,25 +148,25 @@ func (c *Controller) GetNumberOfInvalidUsers() (int, error) {
 	defer cancel()
 
 	var users int
-	if err := c.db.QueryRowContext(ctx, selectNumverOfInvalidUsers).Scan(&users); err != nil {
+	if err := c.db.QueryRowContext(ctx, c.t.selectNumberOfInvalidUsers).Scan(&users); err != nil {
 		return 0, err
 	}
 
 	return users, nil
 }
 
-func (c *Controller) AddUser(username, password string, t float64) error {
+func (c *Controller) AddUser(username, password string, t, w float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	var i int
-	if err := c.db.QueryRowContext(ctx, insertUser, username, password).Scan(&i); err != nil {
+	if err := c.db.QueryRowContext(ctx, c.t.insertUser, username, password).Scan(&i); err != nil {
 		if err != nil {
 			return err
 		}
 	}
 
-	log.Printf("%d user add: %s %s. Average time: %f", i, username, password, t)
+	log.Printf("%d user add: %s %s. Execution time: %f sec, avg: %f sec", i, username, password, w, t)
 	return nil
 }
 
@@ -141,7 +175,7 @@ func (c *Controller) GetAllUsers() ([]Users, error) {
 	defer cancel()
 
 	var users []Users
-	rows, err := c.db.QueryContext(ctx, selectAllUsers)
+	rows, err := c.db.QueryContext(ctx, c.t.selectAllUsers)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +197,7 @@ func (c *Controller) GetNullUser() (string, string, error) {
 	defer cancel()
 
 	var user Users
-	if err := c.db.QueryRowContext(ctx, selectNullUser).Scan(&user.Username, &user.Password); err != nil {
+	if err := c.db.QueryRowContext(ctx, c.t.selectNullUser).Scan(&user.Username, &user.Password); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return "", "", err
 		}
@@ -172,17 +206,17 @@ func (c *Controller) GetNullUser() (string, string, error) {
 	return user.Username, user.Password, nil
 }
 
-func (c *Controller) UpdateToken(username, token string, t float64) error {
+func (c *Controller) UpdateToken(username, token string, t, w float64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if _, err := c.db.ExecContext(ctx, updateToken, username, token); err != nil {
+	if _, err := c.db.ExecContext(ctx, c.t.updateToken, username, token); err != nil {
 		if err != nil {
 			return err
 		}
 	}
 
-	log.Printf("update token: %s %s. Average time: %f", username, token, t)
+	log.Printf("update token: %s %s. Execution time: %f sec, avg: %f sec", username, token, w, t)
 
 	return nil
 }
@@ -191,7 +225,7 @@ func (c *Controller) UpdateInvalidUser(username string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if _, err := c.db.ExecContext(ctx, updateInvalidUser, username); err != nil {
+	if _, err := c.db.ExecContext(ctx, c.t.updateInvalidUser, username); err != nil {
 		if err != nil {
 			return err
 		}

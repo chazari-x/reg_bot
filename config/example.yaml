@@ -10,3 +10,8 @@ db:
   user: "postgres"
   pass: "postgrespw"
   name: "postgres"
+
+site:
+  url: "https://asd.com/"
+  name: "asd"
+  messageTest: ""

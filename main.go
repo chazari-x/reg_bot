@@ -34,7 +34,7 @@ func StartBot() error {
 		_ = wd.Quit()
 	}()
 
-	d, db, err := connDB.GetController(c)
+	d, db, err := connDB.GetController(&c)
 	if err != nil {
 		return fmt.Errorf("connect to db err: %s", err)
 	}
@@ -51,7 +51,7 @@ func StartBot() error {
 	a := captcha.GetController(&c)
 
 	var b bot.Bot
-	b = bot.GetController(s, e, a, d)
+	b = bot.GetController(s, e, a, &c, d)
 
 	allUsers, err := d.GetNumberOfAllUsers()
 	if err != nil {
@@ -64,9 +64,10 @@ func StartBot() error {
 	}
 
 	var numsErr int
-	for i := 0; i < 1001-allUsers+invalidUsers && numsErr < 15; i++ {
+	for i := 0; i < 1000-allUsers+invalidUsers+1 && numsErr < 10; i++ {
 		if err = b.Registration(); err != nil {
 			log.Printf("registration err: %s", err)
+			time.Sleep(time.Second)
 			numsErr++
 			i--
 		} else {
@@ -87,9 +88,10 @@ func StartBot() error {
 	}
 
 	numsErr = 0
-	for i := 0; i < nullUsers && numsErr < 15; i++ {
+	for i := 0; i < nullUsers && numsErr < 10; i++ {
 		if err = b.Authorization(); err != nil {
 			log.Printf("authorization err: %s", err)
+			time.Sleep(time.Second)
 			numsErr++
 			i--
 		} else {
@@ -117,8 +119,6 @@ func StartBot() error {
 	}
 
 	log.Printf("валидных пользователей с токеном: %d", allUsers-invalidUsers-nullUsers)
-
-	time.Sleep(time.Second * 15)
 
 	return nil
 }

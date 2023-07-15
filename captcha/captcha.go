@@ -14,25 +14,22 @@ type Captcha interface {
 
 type Controller struct {
 	a *anticaptcha.Client
+	c *config.Config
 }
 
 func GetController(c *config.Config) *Controller {
-	return &Controller{a: &anticaptcha.Client{APIKey: c.CaptchaToken}}
+	return &Controller{a: &anticaptcha.Client{APIKey: c.CaptchaToken}, c: c}
 }
 
 func (c *Controller) GetCaptchaSolvedKey(captchaKey string) (string, error) {
-	//log.Printf("getting the solved key... ")
-
 	solvedKey, err := c.a.SendRecaptcha(
-		"https://bscscan.com/register", // url that has the recaptcha
-		captchaKey,                     // the recaptcha key
+		c.c.Site.URL+"register", // url that has the recaptcha
+		captchaKey,              // the recaptcha key
 		time.Second*60*30,
 	)
 	if err != nil {
 		return "", fmt.Errorf("send recapthca err: %s", err)
 	}
-
-	//log.Printf("solved key received\n")
 
 	return solvedKey, nil
 }

@@ -2,6 +2,7 @@ package bot
 
 import (
 	"bscscan_login/captcha"
+	"bscscan_login/config"
 	"bscscan_login/connDB"
 	"bscscan_login/connSelenium"
 	"bscscan_login/loginEmail"
@@ -16,6 +17,7 @@ type Controller struct {
 	s  connSelenium.Selenium
 	e  loginEmail.Email
 	a  captcha.Captcha
+	c  *config.Config
 	db connDB.DB
 }
 
@@ -29,11 +31,11 @@ type Step struct {
 
 // Check is an element that may contain an error.
 type Check struct {
-	by    string // Find element by.
-	value string // Search value.
-	error string // Text error.
+	by    string   // Find element by.
+	value string   // Search value.
+	error []string // Text error.
 }
 
-func GetController(s connSelenium.Selenium, e loginEmail.Email, a captcha.Captcha, db connDB.DB) *Controller {
-	return &Controller{s: s, e: e, a: a, db: db}
+func GetController(s connSelenium.Selenium, e loginEmail.Email, a captcha.Captcha, c *config.Config, db connDB.DB) *Controller {
+	return &Controller{s: s, e: e, a: a, c: c, db: db}
 }

@@ -14,7 +14,7 @@ var regNums = 1.0
 func (c *Controller) Registration() error {
 	start := time.Now()
 
-	if err := c.s.OpenURL("https://bscscan.com/register"); err != nil {
+	if err := c.s.OpenURL(c.c.Site.URL + "register"); err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
 
@@ -28,7 +28,7 @@ func (c *Controller) Registration() error {
 			error: Check{
 				by:    selenium.ByID,
 				value: "ContentPlaceHolder1_txtUserName-error",
-				error: "Username is invalid.",
+				error: []string{"Username is invalid.", "Please enter at least 5 characters."},
 			},
 		},
 		{
@@ -38,7 +38,17 @@ func (c *Controller) Registration() error {
 			error: Check{
 				by:    selenium.ByID,
 				value: "ContentPlaceHolder1_txtEmail-error",
-				error: "Please enter a valid email address.",
+				error: []string{"Please enter a valid email address."},
+			},
+		},
+		{
+			by:    selenium.ByID,
+			value: "ContentPlaceHolder1_txtConfirmEmail",
+			keys:  email,
+			error: Check{
+				by:    "",
+				value: "",
+				error: nil,
 			},
 		},
 		{
@@ -48,7 +58,7 @@ func (c *Controller) Registration() error {
 			error: Check{
 				by:    selenium.ByID,
 				value: "ContentPlaceHolder1_txtPassword-error",
-				error: "Your password must be at least 5 characters long.",
+				error: []string{"Your password must be at least"},
 			},
 		},
 		{
@@ -58,7 +68,7 @@ func (c *Controller) Registration() error {
 			error: Check{
 				by:    "",
 				value: "",
-				error: "",
+				error: nil,
 			},
 		},
 		{
@@ -68,20 +78,24 @@ func (c *Controller) Registration() error {
 			error: Check{
 				by:    selenium.ByID,
 				value: "ctl00$ContentPlaceHolder1$MyCheckBox-error",
-				error: "Please accept our Terms and Conditions.",
+				error: []string{"Please accept our Terms and Conditions."},
 			},
 		},
 	}
 
 	for _, step := range steps {
 		if err := c.s.SendKeysToElement(step.by, step.value, step.keys); err != nil {
-			return fmt.Errorf("send keys to element err: %s", err)
+			if step.value != "ContentPlaceHolder1_txtConfirmEmail" {
+				return fmt.Errorf("send keys to element err: %s", err)
+			}
 		}
 
-		if step.error.by != "" && step.error.value != "" && step.error.error != "" {
-			text, _ := c.s.GetElementText(selenium.ByID, step.error.error)
-			if strings.Contains(text, step.error.value) {
-				return fmt.Errorf(text)
+		if step.error.by != "" && step.error.value != "" && step.error.error != nil {
+			text, _ := c.s.GetElementText(selenium.ByID, step.error.value)
+			for _, err := range step.error.error {
+				if strings.Contains(text, err) {
+					return fmt.Errorf(text)
+				}
 			}
 		}
 	}
@@ -104,27 +118,47 @@ func (c *Controller) Registration() error {
 		return fmt.Errorf("send keys to element err: %s", err)
 	}
 
-	text, _ := c.s.GetElementText(selenium.ByXPATH, "//*[@id=\"ctl00\"]/div[4]")
+	var value string
+	switch c.c.Site.Name {
+	case "bscscan":
+		value = "//*[@id=\"ctl00\"]/div[4]"
+	case "etherscan":
+		value = "//*[@id=\"ctl00\"]/div[3]"
+	}
+
+	text, _ := c.s.GetElementText(selenium.ByXPATH, value)
 	if !strings.Contains(text, "Your account registration has been") {
 		return fmt.Errorf(text)
 	}
 
 	url, err := c.e.GetUrl()
 	if err != nil {
-		return fmt.Errorf("get url err: %s", err)
+		return fmt.Errorf("get verify url err: %s", err)
+	}
+
+	if url == "" {
+		return fmt.Errorf("verify url is nil")
 	}
 
 	if err = c.s.OpenURL(url); err != nil {
-		return fmt.Errorf("open url err: %s", err)
+		return fmt.Errorf("open verify url err: %s", err)
 	}
 
-	text, _ = c.s.GetElementValue(selenium.ByCSSSelector, "input[type=submit]")
-	if !strings.Contains(text, "Click to Login") {
-		return fmt.Errorf("invalid account confirmation: %s != %s", "Click to Login", text)
+	switch c.c.Site.Name {
+	case "bscscan":
+		text, _ = c.s.GetElementValue(selenium.ByCSSSelector, "input[type=submit]")
+		if !strings.Contains(text, "Click to Login") {
+			return fmt.Errorf("invalid account confirmation: %s != %s", "Click to Login", text)
+		}
+	case "etherscan":
+		text, _ = c.s.GetElementText(selenium.ByXPATH, "//*[@id=\"form1\"]/div[3]/div/p/strong")
+		if !strings.Contains(text, "Congratulations!") {
+			return fmt.Errorf("invalid account confirmation: %s != %s", "Congratulations!", text)
+		}
 	}
 
 	regNums++
 	registrationAverageTime = registrationAverageTime + time.Since(start).Seconds()
 
-	return c.db.AddUser(username, password, registrationAverageTime/regNums)
+	return c.db.AddUser(username, password, registrationAverageTime/regNums, time.Since(start).Seconds())
 }

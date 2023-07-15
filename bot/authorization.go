@@ -15,7 +15,7 @@ var authNums = 1.0
 func (c *Controller) Authorization() error {
 	start := time.Now()
 
-	if err := c.s.OpenURL("https://bscscan.com/login"); err != nil {
+	if err := c.s.OpenURL(c.c.Site.URL + "login"); err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
 
@@ -36,7 +36,7 @@ func (c *Controller) Authorization() error {
 			error: Check{
 				by:    selenium.ByID,
 				value: "ContentPlaceHolder1_txtUserName-error",
-				error: "Username is required",
+				error: []string{"Username is required", "Please enter your"},
 			},
 		},
 		{
@@ -46,7 +46,7 @@ func (c *Controller) Authorization() error {
 			error: Check{
 				by:    selenium.ByID,
 				value: "ContentPlaceHolder1_txtPassword-error",
-				error: "Your password is invalid",
+				error: []string{"Your password is invalid", "Please enter your"},
 			},
 		},
 	}
@@ -57,15 +57,17 @@ func (c *Controller) Authorization() error {
 			if strings.Contains(text, "Sorry, our servers are currently busy") {
 				time.Sleep(time.Second * 5)
 
-				return fmt.Errorf("t/o: %s", text)
+				return fmt.Errorf("timeout: %s", text)
 			}
 
 			return fmt.Errorf("send keys to element err: %s", err)
 		}
 
-		if step.error.by != "" && step.error.value != "" && step.error.error != "" {
-			if keys, _ := c.s.GetElementText(selenium.ByID, step.error.value); strings.Contains(keys, step.error.value) {
-				return fmt.Errorf(keys)
+		if step.error.by != "" && step.error.value != "" && step.error.error != nil {
+			for _, err := range step.error.error {
+				if text, _ := c.s.GetElementText(selenium.ByID, step.error.value); strings.Contains(text, err) {
+					return fmt.Errorf(text)
+				}
 			}
 		}
 	}
@@ -90,17 +92,27 @@ func (c *Controller) Authorization() error {
 		return fmt.Errorf("send keys to element err: %s", err)
 	}
 
-	text, _ := c.s.GetElementText(selenium.ByXPATH, "//*[@id=\"form1\"]/div[4]")
+	var value string
+	switch c.c.Site.Name {
+	case "bscscan":
+		value = "//*[@id=\"form1\"]/div[4]"
+	case "etherscan":
+		value = "//*[@id=\"ContentPlaceHolder1_divLogin\"]/div[2]"
+	}
+
+	text, _ := c.s.GetElementText(selenium.ByXPATH, value)
 	if strings.Contains(text, "Invalid login information") ||
-		strings.Contains(text, "Please verify your email address first. ") {
+		strings.Contains(text, "Please verify your email") {
 		if err = c.db.UpdateInvalidUser(username); err != nil {
 			return fmt.Errorf("invalid login information: %s %s (the db has not meen update: %s)", username, password, err)
 		}
 
 		return fmt.Errorf("invalid login information: %s %s", username, password)
+	} else if strings.Contains(text, "Invalid captcha") {
+		return fmt.Errorf(text)
 	}
 
-	err = c.s.OpenURL("https://bscscan.com/myapikey")
+	err = c.s.OpenURL(c.c.Site.URL + "myapikey")
 	if err != nil {
 		return fmt.Errorf("open url err: %s", err)
 	}
@@ -129,12 +141,24 @@ func (c *Controller) Authorization() error {
 		}
 	}
 
-	text, _ = c.s.GetElementText(selenium.ByCSSSelector, "div[class=alert]")
-	if !strings.Contains(text, "Successfully Created") && text != "" {
-		return fmt.Errorf(text)
+	switch c.c.Site.Name {
+	case "bscscan":
+		text, _ = c.s.GetElementText(selenium.ByCSSSelector, "div[class=alert]")
+		if !strings.Contains(text, "Successfully Created") && text != "" {
+			return fmt.Errorf(text)
+		}
+
+		value = "//*[@id=\"SVGdataReport1\"]/table/tbody/tr[1]/td[1]/a[1]"
+	case "etherscan":
+		text, _ = c.s.GetElementText(selenium.ByXPATH, "//*[@id=\"content\"]/div/div/div[2]/div[1]/div[1]/div/span")
+		if !strings.Contains(text, "Successfully created") && text != "" {
+			return fmt.Errorf(text)
+		}
+
+		value = "//*[@id=\"content\"]/div/div/div[2]/div[1]/div[4]/table/tbody/tr/td[3]/a"
 	}
 
-	if err = c.s.SendKeysToElement(selenium.ByXPATH, "//*[@id=\"SVGdataReport1\"]/table/tbody/tr/td[1]/a[2]", selenium.EnterKey); err != nil {
+	if err = c.s.SendKeysToElement(selenium.ByXPATH, value, selenium.EnterKey); err != nil {
 		return fmt.Errorf("send keys to element err: %s", err)
 	}
 
@@ -146,5 +170,5 @@ func (c *Controller) Authorization() error {
 	authNums++
 	authorizationAverageTime = authorizationAverageTime + time.Since(start).Seconds()
 
-	return c.db.UpdateToken(username, regexp.MustCompile(`[A-Za-z0-9]{10,}`).FindString(url), authorizationAverageTime/authNums)
+	return c.db.UpdateToken(username, regexp.MustCompile(`[A-Za-z0-9]{10,}`).FindString(url), authorizationAverageTime/authNums, time.Since(start).Seconds())
 }
